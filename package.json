@@ -1,0 +1,30 @@
+{
+  "name": "monad_bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for trading tokens on Monad blockchain",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "monad",
+    "telegram",
+    "bot",
+    "crypto",
+    "trading",
+    "dex",
+    "uniswap"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.9.1",
+    "nodemon": "^3.1.0",
+    "telegraf": "^4.15.3"
+  }
+}

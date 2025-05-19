@@ -1,0 +1,165 @@
+# MONAD TELEGRAM TRADING BOT - PROCESS GUIDELINES
+
+## 1. USER ONBOARDING & INTERFACE
+
+- **Initial Welcome**: When user adds the bot or sends /start, display a professional welcome message with a comprehensive overview of functionality.
+- **Command Buttons**: All available commands should be clearly accessible via buttons in the main menu.
+- **Button Functionality**: All buttons must function identically to their equivalent slash commands.
+- **Consistent UI**: Maintain a consistent visual style with clear prompts and confirmations.
+- **Network Indicators**: Always display the current blockchain network in message headers for user awareness.
+
+## 2. WALLET MANAGEMENT
+
+- **Import Options**: Provide both wallet generation and private key import options with clear security warnings.
+- **Security Measures**: Never store private keys in plain text; use secure encryption methods.
+- **Balance Display**: When viewing balances, scan and show ALL tokens owned by the user on the blockchain, not just predefined tokens.
+- **Explorer Links**: Include blockchain explorer links for all wallets and transactions.
+- **Multiple Wallet Support**: Allow users to manage multiple wallets if needed in future updates.
+
+## 3. SWAP FUNCTIONALITY
+
+- **Token Selection**: Display major tokens available for swapping based on the current blockchain.
+- **Custom Token Support**: Provide "Custom Swap" option allowing users to input any token address.
+- **Price Impact**: Show estimated price impact and slippage for all swaps.
+- **Quote Preview**: Before confirming any swap, show a detailed quote with expected output.
+- **Router Verification**: Periodically verify router contract addresses are correct and up-to-date.
+- **Transaction Progress**: Show clear transaction progress indicators during processing.
+- **Swap History**: Maintain transaction history for user reference.
+
+## 4. TRANSACTION CAPABILITIES
+
+- **Token Transfers**: Enable sending both native currency and tokens to any address.
+- **Batch Operations**: Consider supporting batch transfers in future updates.
+- **Gas Optimization**: Implement gas estimation and allow for gas customization in advanced settings.
+- **Transaction Statuses**: Provide clear success/failure messages with detailed transaction information.
+- **Confirmation Process**: Require explicit confirmation before executing any transaction.
+- **Transaction Receipts**: Generate transaction receipts with all relevant details.
+
+## 5. TOKEN INFORMATION
+
+- **Address Recognition**: Automatically detect when users paste a token address in any chat context.
+- **Token Details**: Show comprehensive token information including name, symbol, decimals, total supply, and user's balance.
+- **Price Data**: Include current price information when available.
+- **Trading Options**: Provide quick swap buttons directly from token information display.
+- **Watchlist Integration**: Allow adding tokens to watchlist from token info screen.
+
+## 6. MULTI-CHAIN ARCHITECTURE
+
+- **Modular Design Pattern**: Use a modular architecture that separates blockchain-specific code from core bot functionality.
+- **Standardized Integration Interface**: Create a common interface that all blockchain integrations must implement, with methods like getBalance(), executeSwap(), sendTokens(), etc.
+- **Chain Configuration System**: Store network-specific parameters (RPC URLs, contract addresses, explorer URLs, etc.) in a centralized config file that can be easily expanded.
+- **Dynamic Chain Selection**: Allow users to switch between blockchains with a dedicated "Chains" button in the main menu.
+- **Chain-Specific ABIs**: Maintain separate ABI files for each blockchain's contracts (router, factory, tokens).
+- **ChainConfig Object Pattern**: Use a standardized ChainConfig object structure containing:
+  - name: Human-readable chain name
+  - chainId: Network identifier
+  - rpc: RPC endpoint URL
+  - nativeCurrency: Native token symbol and details
+  - blockExplorerUrl: Block explorer base URL
+  - addresses: Object containing critical contract addresses (ROUTER, FACTORY, WETH)
+  - tokens: Mapping of supported tokens with their details
+- **Network Status Monitoring**: Implement health checks for each blockchain's RPC endpoint.
+- **Chain-Specific Helpers**: Create utility functions for chain-specific operations that abstract complexity.
+- **Common Data Model**: Use a consistent data structure to represent tokens, balances, and transactions across all chains.
+
+## 7. ERROR HANDLING & LOGGING
+
+- **Specific Error Messages**: Log detailed errors with specific information about what failed.
+- **User-Friendly Errors**: Present technical errors to users in understandable language.
+- **Missing Parameters**: Actively prompt users for any required blockchain details that might be missing.
+- **Recovery Mechanisms**: Implement recovery paths for common error scenarios.
+- **Retry Logic**: Add appropriate retry logic for temporary blockchain issues.
+- **Transaction Monitoring**: Monitor pending transactions and alert on unusual delays.
+
+## 8. BLOCKCHAIN INTERACTION
+
+- **Address Validation**: Validate all addresses before attempting transactions.
+- **Contract Verification**: Verify contract interfaces before interaction.
+- **Gas Management**: Implement proper gas estimation with safety margins.
+- **Nonce Handling**: Track and handle transaction nonces properly to prevent stuck transactions.
+- **RPC Fallbacks**: Implement fallback RPC providers if primary fails.
+- **Token Standards**: Support standard ERC-20/BEP-20 tokens, with clear errors for non-standard tokens.
+
+## 9. CODE STRUCTURE & MAINTENANCE
+
+- **Integration Layer Architecture**: Follow a layered architecture approach:
+  - Bot Interface Layer: Handles Telegram interaction
+  - Business Logic Layer: Processes user commands and requests
+  - Integration Layer: Manages blockchain interactions
+  - Data Layer: Handles storage and retrieval of user data
+- **Integration Class Factory**: Use a factory pattern to instantiate the correct blockchain integration class based on user selection.
+- **Service Provider Pattern**: Create separate service providers for each blockchain that implement a common interface.
+- **Dynamic Chain Registry**: Maintain a registry of supported chains that can be expanded without modifying core code.
+- **Chain-Specific Command Handlers**: Implement command handlers that adapt to the selected blockchain.
+- **Configuration System**: Use .env for sensitive data and configuration files for network-specific data.
+- **Testing Protocol**: Implement testing protocol for new blockchain integrations.
+- **Documentation**: Document all components, especially network integration points.
+- **Versioning**: Maintain clear version control and change logs.
+
+## 10. MAESTRO BOT COMPARATIVE ANALYSIS
+
+- **Strengths to Implement**:
+  - Token scanning and monitoring
+  - Trade monitoring with real-time updates
+  - Limit order functionality
+  - Detailed token analysis on paste
+  - Clear transaction progress indicators
+  - Multi-wallet support
+  - Cross-chain token discovery
+  - Chain-specific DEX integrations
+  
+- **Areas for Enhancement**:
+  - More detailed price impact warnings
+  - Enhanced token security information
+  - Additional supported DEXes per chain
+  - Historical transaction view
+  - Portfolio analytics
+  - Gas optimization options
+  - Cross-chain portfolio view
+
+## 11. MONAD TESTNET NETWORK DETAILS
+
+### Network Information
+- **Network Name**: Monad Testnet
+- **Chain ID**: 10143
+- **Currency Symbol**: MON
+- **RPC Endpoint**: https://testnet-rpc.monad.xyz
+- **Block Explorer**: https://testnet.monadexplorer.com
+- **Faucet**: https://faucet.monad.xyz
+
+### Canonical Contract Addresses
+- **UniswapV2Factory**: 0x733e88f248b742db6c14c0b1713af5ad7fdd59d0
+- **UniswapV2Router02**: 0xfb8e1c3b833f9e67a71c859a132cf783b645e436
+- **Uniswap Universal Router**: 0x3ae6d8a282d67893e17aa70ebffb33ee5aa65893
+- **WrappedMonad (WMON)**: 0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701
+- **Multicall3**: 0xcA11bde05977b3631167028862bE2a173976CA11
+- **Permit2**: 0x000000000022d473030f116ddee9f6b43ac78ba3
+
+### Common Testnet Tokens
+- **USDC (testnet)**: 0xf817257fed379853cDe0fa4F97AB987181B1E5Ea
+- **USDT (testnet)**: 0x88b8E2161DEDC77EF4ab7585569D2415a1C1055D
+- **WBTC (testnet)**: 0xcf5a6076cfa32686c0Df13aBaDa2b40dec133F1d
+- **WETH (testnet)**: 0xB5a30b0FDc5EA94A52fDc42e3E9760Cb8449Fb37
+- **WSOL (testnet)**: 0x5387C85A4965769f6B0Df430638a1388493486F1
+
+### Current Config vs Official Addresses
+- **Router**: Current config uses 0x812c5f20C20Fbb848D35F013Da9Cf99B7649D274, official is 0xfb8e1c3b833f9e67a71c859a132cf783b645e436
+- **Factory**: Current config uses 0x1a3cF2917BF172d86A3240EC02c036CBF9fbD3D2, official is 0x733e88f248b742db6c14c0b1713af5ad7fdd59d0
+- **WETH/WMON**: Current config uses 0xFEa9e31C9FEA2bBA7D297CA9d7A95834ae896f71, official is 0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701
+- **ChainID**: Current config uses 1337, official is 10143
+- **RPC**: Current config uses https://rpc.ankr.com/monad_testnet, official is https://testnet-rpc.monad.xyz
+
+### Development Requirements
+- Update configuration file with the official addresses and parameters
+- Test all swap and token interaction functionalities with the official contracts
+- Add support for scanning user wallets for all tokens, not just predefined ones
+- Implement detailed error handling specific to Monad chain errors and peculiarities
+- Optimize gas usage for Monad's specific blockchain characteristics
+- Update explorer links to use the official block explorer
+
+
+## 11. ENSURE THAT ALL THE BLOCKCHAIN EXPLORERS ARE CORRECTLY CONFIGURED.
+
+## 11. BE AS PROFESSIONAL AS POSSIBLE THIS IS A LIVE PROJECT.
+  
+This Process.txt serves as a comprehensive roadmap for development and quality assurance of the Monad Trading Bot. All new features and fixes should adhere to these guidelines to ensure consistency, security, and usability. 

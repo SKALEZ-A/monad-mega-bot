@@ -69,6 +69,55 @@ const NETWORKS = {
                 logoURI: 'https://assets.coingecko.com/coins/images/4128/small/solana.png'
             }
         }
+    },
+    MEGAETH: {
+        name: 'MegaETH Testnet',
+        chainId: 6342,
+        rpc: 'https://carrot.megaeth.com/rpc',
+        nativeCurrency: 'ETH',
+        blockExplorerUrl: 'https://megaexplorer.xyz',
+        addresses: {
+            ROUTER: '0x0000000000000000000000000000000000000000', // TODO: Update with official router address
+            FACTORY: '0x0000000000000000000000000000000000000000', // TODO: Update with official factory address
+            WETH: '0x4eb2bd7bee16f38b1f4a0a5796fffd028b6040e9' // Using ETH as WETH for now
+        },
+        tokens: {
+            'ETH': {
+                address: '0x4eb2bd7bee16f38b1f4a0a5796fffd028b6040e9',
+                symbol: 'ETH',
+                name: 'Ethereum',
+                decimals: 18,
+                logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+            },
+            'USDC': {
+                address: '0x8d635c4702ba38b1f1735e8e784c7265dcc0b623',
+                symbol: 'USDC',
+                name: 'USD Coin',
+                decimals: 6,
+                logoURI: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+            },
+            'BRONTO': {
+                address: '0x9a9b33227fa5d386987a5892a7f0b730c9ba3e22',
+                symbol: 'BRONTO',
+                name: 'Bronto',
+                decimals: 18,
+                logoURI: ''
+            },
+            'MEGA': {
+                address: '0xd02a3d7f7f3ba8e8dc4059b931b737b8ca59209a',
+                symbol: 'MEGA',
+                name: 'Mega',
+                decimals: 18,
+                logoURI: ''
+            },
+            'WBTC': {
+                address: '0xfe928dd7d9cda6bcf7f2600b4a0e9726ae4d2577',
+                symbol: 'WBTC',
+                name: 'Wrapped Bitcoin',
+                decimals: 8,
+                logoURI: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png'
+            }
+        }
     }
 };
 

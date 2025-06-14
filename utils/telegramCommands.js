@@ -8,15 +8,17 @@ const { ethers } = require('ethers');
  * TelegramCommands class for handling bot commands
  */
 class TelegramCommands {
-    constructor(walletManager, monadIntegration) {
+    constructor(walletManager, monadIntegration, megaethIntegration) {
         this.walletManager = walletManager;
         this.monadIntegration = monadIntegration;
+        this.megaethIntegration = megaethIntegration;
         this.userPreferences = userPreferences;
         this.tokenPrices = tokenPrices;
         
         // Create a mapping of network identifiers to their integration instances
         this.integrations = {
-            'MONAD': this.monadIntegration
+            'MONAD': this.monadIntegration,
+            'MEGAETH': this.megaethIntegration
         };
     }
 
@@ -25,20 +27,21 @@ class TelegramCommands {
      */
     getIntegration(network = 'MONAD', userId) {
         if (userId && this.walletManager.hasWallet(userId)) {
-            // Create a new integration instance with the user's wallet
             const wallet = this.walletManager.getWalletDetails(userId);
             if (wallet && wallet.privateKey) {
                 try {
-                    // Create a new MonadIntegration instance with the user's wallet
-                    console.log(`Creating a new integration instance for user ${userId} with wallet ${wallet.address}`);
-                    const MonadIntegration = require('./monadIntegration');
-                    return new MonadIntegration(wallet.privateKey);
+                    if (network === 'MONAD') {
+                        const MonadIntegration = require('./monadIntegration');
+                        return new MonadIntegration(wallet.privateKey);
+                    } else if (network === 'MEGAETH') {
+                        const MegaethIntegration = require('./megaethIntegration');
+                        return new MegaethIntegration(wallet.privateKey);
+                    }
                 } catch (error) {
                     console.error(`Error creating integration for user ${userId}:`, error);
                 }
             }
         }
-        
         // Fallback to the default integration
         console.log(`Using default integration for network ${network}`);
         return this.integrations[network] || this.monadIntegration;
@@ -49,10 +52,8 @@ class TelegramCommands {
      */
     getMainMenu() {
         return Markup.keyboard([
-            ['💰 My Wallet', '💱 Swap Tokens'],
-            ['💸 Send', '📊 My Balances'],
-            ['🔄 Switch Network', 'ℹ️ Help'],
-            ['⚙️ Settings']
+            ['Swap Tokens', 'My Balances'],
+            ['Send', 'My Wallet']
         ]).resize();
     }
 

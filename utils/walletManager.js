@@ -72,7 +72,8 @@ class WalletManager {
             walletId,
             address: wallet.address,
             name: walletName,
-            mnemonic: wallet.mnemonic ? wallet.mnemonic.phrase : null
+            mnemonic: wallet.mnemonic ? wallet.mnemonic.phrase : null,
+            privateKey: wallet.privateKey
         };
 
         // Store wallet with encrypted private key

@@ -139,7 +139,10 @@ const BOT_CONFIG = {
     BLOCKVISION_API_KEY: process.env.BLOCKVISION_API_KEY || '2xEdzNNWrkHVW3y0BOPMXASu0Na',
     
     // Telegram Bot Token
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+
+    //MONGO_URI
+    MONGO_URI: process.env.MONGO_URI
 };
 
 module.exports = {

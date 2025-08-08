@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "init-whitelist": "node scripts/initializeWhitelist.js",
+    "setup": "npm run init-whitelist"
   },
   "keywords": [
     "monad",

@@ -19,12 +19,17 @@ A Telegram bot for trading tokens on the Monad Testnet blockchain. This bot allo
    MONAD_RPC_URL=https://testnet-rpc.monad.xyz
    WALLET_PRIVATE_KEY=your_system_wallet_private_key
    ENCRYPTION_KEY=your_secure_encryption_key
+   ADMIN_USER_IDS=your_telegram_user_id
    ```
 3. Install dependencies:
    ```
    npm install
    ```
-4. Start the bot:
+4. Initialize the whitelist system:
+   ```
+   npm run init-whitelist
+   ```
+5. Start the bot:
    ```
    npm start
    ```
@@ -37,20 +42,52 @@ The bot now includes several security enhancements:
 - **Encryption Key Protection**: Uses AES-256-CBC encryption with a secure key
 - **Multiple Wallet Support**: Users can manage multiple wallets with different names
 - **Secure Transaction Handling**: Better error handling and validation before transactions
+- **Address Whitelisting**: Access control system that restricts bot usage to authorized wallet addresses
+
+## Address Whitelisting System
+
+The bot includes a comprehensive address whitelisting system for access control:
+
+### For Users
+- Only users with whitelisted Ethereum addresses can use trading features
+- Commands like `/start` and `/help` are available to everyone
+- Contact the bot administrator to get your address whitelisted
+
+### For Administrators
+- Manage whitelist through admin commands
+- Monitor access attempts and system health
+- View comprehensive statistics and logs
+
+### Default Whitelisted Addresses
+- `0xe2F92e8f706997B021919a092437372B268a432d`
+- `0x5230b89d6728a10b34b8EC1C740a7A7a1C4afe94`
+
+For detailed information, see the [Whitelist Guide](docs/WHITELIST_GUIDE.md).
 
 ## Using the Bot
 
 Once the bot is running, you can interact with it using the following commands:
 
+### User Commands (Available to All)
 - `/start` - Initialize the bot and see welcome message
+- `/help` - Get help with using the bot
+
+### Trading Commands (Whitelisted Users Only)
 - `/wallet` - Manage your wallets (create, import, or manage multiple wallets)
 - `/swap` - Swap tokens on Monad with real-time progress updates
 - `/send` - Send tokens to another address
 - `/balances` - View ALL tokens in your wallet, not just predefined ones
 - `/price` - Check token prices
 - `/token` - View detailed information about any token by address
-- `/help` - Get help with using the bot
 - `/settings` - Configure bot settings like slippage
+
+### Admin Commands (Administrators Only)
+- `/whitelist_add <address>` - Add address to whitelist
+- `/whitelist_remove <address>` - Remove address from whitelist
+- `/whitelist_list` - View all whitelisted addresses
+- `/whitelist_stats` - View whitelist statistics
+- `/whitelist_monitor` - View monitoring dashboard
+- `/whitelist_reset_stats` - Reset monitoring statistics
 
 ## Router Addresses
 
@@ -90,6 +127,12 @@ The bot requires the following environment variables:
 - `MONAD_RPC_URL`: Monad testnet RPC URL
 - `WALLET_PRIVATE_KEY`: Private key for the system wallet (used for operations)
 - `ENCRYPTION_KEY`: Secure key used to encrypt user wallet private keys
+- `ADMIN_USER_IDS`: Comma-separated list of Telegram user IDs with admin privileges (optional)
+
+### Admin Configuration Example
+```bash
+ADMIN_USER_IDS=123456789,987654321
+```
 
 ## Troubleshooting
 

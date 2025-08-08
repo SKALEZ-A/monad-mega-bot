@@ -8,12 +8,14 @@ const { ethers } = require('ethers');
  * TelegramCommands class for handling bot commands
  */
 class TelegramCommands {
-    constructor(walletManager, monadIntegration, megaethIntegration) {
+    constructor(walletManager, monadIntegration, megaethIntegration, whitelistManager = null, monitor = null) {
         this.walletManager = walletManager;
         this.monadIntegration = monadIntegration;
         this.megaethIntegration = megaethIntegration;
         this.userPreferences = userPreferences;
         this.tokenPrices = tokenPrices;
+        this.whitelistManager = whitelistManager;
+        this.monitor = monitor;
         
         // Create a mapping of network identifiers to their integration instances
         this.integrations = {
@@ -1192,6 +1194,351 @@ class TelegramCommands {
         // Last resort fallback - return WETH address
         console.warn(`No resolution for token ID ${shortId}, using WETH as fallback`);
         return NETWORKS[network]?.addresses?.WETH || '0x0000000000000000000000000000000000000000';
+    }
+
+    // ============================================
+    // WHITELIST MANAGEMENT COMMANDS
+    // ============================================
+
+    /**
+     * Validate admin access for whitelist commands
+     * @private
+     */
+    validateAdminAccess(ctx) {
+        // For now, we'll implement a simple admin check
+        // In production, this should check against a list of admin user IDs
+        const adminUserIds = process.env.ADMIN_USER_IDS ? 
+            process.env.ADMIN_USER_IDS.split(',').map(id => id.trim()) : [];
+        
+        const userId = ctx.from.id.toString();
+        return adminUserIds.includes(userId);
+    }
+
+    /**
+     * Add address to whitelist command
+     */
+    async addAddressCommand(ctx, address) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            // Validate address format
+            if (!address) {
+                return { success: false, message: '❌ Please provide an address to add.\nUsage: `/whitelist_add 0x1234...`' };
+            }
+
+            if (!this.whitelistManager.validateAddress(address)) {
+                return { success: false, message: '❌ Invalid address format. Please provide a valid Ethereum address.' };
+            }
+
+            // Check if address is already whitelisted
+            if (this.whitelistManager.isAddressWhitelisted(address)) {
+                return { success: false, message: `ℹ️ Address \`${address}\` is already whitelisted.` };
+            }
+
+            // Add address to whitelist
+            const result = await this.whitelistManager.addAddress(address);
+            
+            // Log the modification attempt
+            if (this.monitor) {
+                await this.monitor.logModification(
+                    'ADD',
+                    address,
+                    ctx.from.id,
+                    ctx.from.username,
+                    result.success,
+                    result.success ? null : new Error(result.error || 'Unknown error')
+                );
+            }
+            
+            if (result.success) {
+                return { 
+                    success: true, 
+                    message: `✅ Address \`${address}\` has been added to the whitelist.\n\nTotal whitelisted addresses: ${result.totalAddresses}` 
+                };
+            } else {
+                return { success: false, message: `❌ Failed to add address: ${result.error}` };
+            }
+        } catch (error) {
+            console.error('Error in addAddressCommand:', error);
+            return { success: false, message: `❌ Error adding address: ${error.message}` };
+        }
+    }
+
+    /**
+     * Remove address from whitelist command
+     */
+    async removeAddressCommand(ctx, address) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            // Validate address format
+            if (!address) {
+                return { success: false, message: '❌ Please provide an address to remove.\nUsage: `/whitelist_remove 0x1234...`' };
+            }
+
+            if (!this.whitelistManager.validateAddress(address)) {
+                return { success: false, message: '❌ Invalid address format. Please provide a valid Ethereum address.' };
+            }
+
+            // Check if address is in whitelist
+            if (!this.whitelistManager.isAddressWhitelisted(address)) {
+                return { success: false, message: `ℹ️ Address \`${address}\` is not in the whitelist.` };
+            }
+
+            // Remove address from whitelist
+            const result = await this.whitelistManager.removeAddress(address);
+            
+            // Log the modification attempt
+            if (this.monitor) {
+                await this.monitor.logModification(
+                    'REMOVE',
+                    address,
+                    ctx.from.id,
+                    ctx.from.username,
+                    result.success,
+                    result.success ? null : new Error(result.error || 'Unknown error')
+                );
+            }
+            
+            if (result.success) {
+                return { 
+                    success: true, 
+                    message: `✅ Address \`${address}\` has been removed from the whitelist.\n\nTotal whitelisted addresses: ${result.totalAddresses}` 
+                };
+            } else {
+                return { success: false, message: `❌ Failed to remove address: ${result.error}` };
+            }
+        } catch (error) {
+            console.error('Error in removeAddressCommand:', error);
+            return { success: false, message: `❌ Error removing address: ${error.message}` };
+        }
+    }
+
+    /**
+     * List all whitelisted addresses command
+     */
+    async listWhitelistCommand(ctx) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            const addresses = this.whitelistManager.getWhitelistedAddresses();
+            
+            if (addresses.length === 0) {
+                return { success: true, message: '📋 *Whitelist is empty*\n\nNo addresses are currently whitelisted.' };
+            }
+
+            const message = this.formatWhitelistDisplay(addresses);
+            return { success: true, message };
+        } catch (error) {
+            console.error('Error in listWhitelistCommand:', error);
+            return { success: false, message: `❌ Error retrieving whitelist: ${error.message}` };
+        }
+    }
+
+    /**
+     * Get whitelist statistics command
+     */
+    async whitelistStatsCommand(ctx) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            const stats = this.whitelistManager.getWhitelistStats();
+            
+            let message = `📊 *Whitelist Statistics*\n`;
+            message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            message += `📋 Total Addresses: *${stats.totalAddresses}*\n`;
+            message += `📅 Last Updated: *${stats.lastUpdated ? new Date(stats.lastUpdated).toLocaleString() : 'Never'}*\n`;
+            message += `🕐 Created: *${stats.createdAt ? new Date(stats.createdAt).toLocaleString() : 'Unknown'}*\n\n`;
+            
+            if (stats.totalAddresses > 0) {
+                message += `🔍 Recent Addresses:\n`;
+                const addresses = this.whitelistManager.getWhitelistedAddresses();
+                const recentAddresses = addresses.slice(-3); // Show last 3 addresses
+                
+                for (const address of recentAddresses) {
+                    message += `• \`${address}\`\n`;
+                }
+                
+                if (addresses.length > 3) {
+                    message += `• ... and ${addresses.length - 3} more\n`;
+                }
+            }
+
+            return { success: true, message };
+        } catch (error) {
+            console.error('Error in whitelistStatsCommand:', error);
+            return { success: false, message: `❌ Error retrieving whitelist statistics: ${error.message}` };
+        }
+    }
+
+    /**
+     * Format whitelist display for better readability
+     * @private
+     */
+    formatWhitelistDisplay(addresses) {
+        let message = `📋 *Whitelisted Addresses*\n`;
+        message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        message += `Total: *${addresses.length}* address${addresses.length !== 1 ? 'es' : ''}\n\n`;
+        
+        // Group addresses for better display
+        addresses.forEach((address, index) => {
+            message += `${index + 1}. \`${address}\`\n`;
+        });
+        
+        message += `\n💡 *Admin Commands:*\n`;
+        message += `• \`/whitelist_add <address>\` - Add address\n`;
+        message += `• \`/whitelist_remove <address>\` - Remove address\n`;
+        message += `• \`/whitelist_list\` - View all addresses\n`;
+        
+        return message;
+    }
+
+    /**
+     * Get whitelist monitoring statistics command
+     */
+    async whitelistMonitoringCommand(ctx) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            if (!this.monitor) {
+                return { success: false, message: '❌ Monitoring system not available.' };
+            }
+
+            const stats = this.monitor.getStatistics();
+            const health = await this.monitor.getHealthStatus();
+            
+            let message = `📊 *Whitelist Monitoring Report*\n`;
+            message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            
+            // System status
+            message += `🔍 *System Status*\n`;
+            message += `• Health: ${health.status === 'healthy' ? '✅ Healthy' : '⚠️ Issues detected'}\n`;
+            message += `• Uptime: ${stats.uptime}\n\n`;
+            
+            // Access statistics
+            message += `🚪 *Access Statistics*\n`;
+            message += `• Total attempts: ${stats.access.total}\n`;
+            message += `• Authorized: ${stats.access.authorized}\n`;
+            message += `• Denied: ${stats.access.denied}\n`;
+            message += `• Errors: ${stats.access.errors}\n`;
+            
+            if (stats.access.total > 0) {
+                const successRate = ((stats.access.authorized / stats.access.total) * 100).toFixed(1);
+                message += `• Success rate: ${successRate}%\n`;
+            }
+            message += `\n`;
+            
+            // Performance metrics
+            message += `⚡ *Performance*\n`;
+            message += `• Avg response time: ${stats.performance.averageAccessCheckTime.toFixed(2)}ms\n`;
+            message += `• Slowest check: ${stats.performance.slowestAccessCheck}ms\n`;
+            message += `• Recent avg: ${stats.performance.recentAverageTime.toFixed(2)}ms\n\n`;
+            
+            // Modifications
+            message += `✏️ *Modifications*\n`;
+            message += `• Total: ${stats.modifications.total}\n`;
+            message += `• Additions: ${stats.modifications.additions}\n`;
+            message += `• Removals: ${stats.modifications.removals}\n`;
+            message += `• Errors: ${stats.modifications.errors}\n\n`;
+            
+            // Whitelist status
+            if (stats.health) {
+                message += `📋 *Whitelist Status*\n`;
+                message += `• Size: ${stats.health.whitelistSize}/${stats.health.maxSize}\n`;
+                message += `• Utilization: ${stats.health.utilizationPercent}%\n\n`;
+            }
+            
+            // Warnings and issues
+            if (health.warnings.length > 0) {
+                message += `⚠️ *Warnings*\n`;
+                health.warnings.forEach(warning => {
+                    message += `• ${warning}\n`;
+                });
+                message += `\n`;
+            }
+            
+            if (health.issues.length > 0) {
+                message += `❌ *Issues*\n`;
+                health.issues.forEach(issue => {
+                    message += `• ${issue}\n`;
+                });
+                message += `\n`;
+            }
+            
+            message += `📅 Generated: ${new Date().toLocaleString()}`;
+            
+            return { success: true, message };
+            
+        } catch (error) {
+            console.error('Error in whitelistMonitoringCommand:', error);
+            return { success: false, message: `❌ Error retrieving monitoring data: ${error.message}` };
+        }
+    }
+
+    /**
+     * Reset whitelist monitoring statistics command
+     */
+    async resetMonitoringStatsCommand(ctx) {
+        try {
+            if (!this.whitelistManager) {
+                return { success: false, message: '❌ Whitelist manager not initialized.' };
+            }
+
+            // Validate admin access
+            if (!this.validateAdminAccess(ctx)) {
+                return { success: false, message: '🚫 Access denied. Admin privileges required.' };
+            }
+
+            if (!this.monitor) {
+                return { success: false, message: '❌ Monitoring system not available.' };
+            }
+
+            this.monitor.resetStatistics();
+            
+            return { 
+                success: true, 
+                message: `✅ Monitoring statistics have been reset.\n\nAll counters and performance metrics have been cleared.` 
+            };
+            
+        } catch (error) {
+            console.error('Error in resetMonitoringStatsCommand:', error);
+            return { success: false, message: `❌ Error resetting statistics: ${error.message}` };
+        }
     }
 }
 

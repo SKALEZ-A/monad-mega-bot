@@ -4,6 +4,10 @@ const MonadIntegration = require('./utils/monadIntegration');
 const MegaethIntegration = require('./utils/megaethIntegration');
 const WalletManager = require('./utils/walletManager');
 const TelegramCommands = require('./utils/telegramCommands');
+const WhitelistManager = require('./utils/whitelistManager');
+const WhitelistMiddleware = require('./utils/whitelistMiddleware');
+const WhitelistInitializer = require('./utils/whitelistInitializer');
+const WhitelistMonitor = require('./utils/whitelistMonitor');
 const { BOT_CONFIG, NETWORKS } = require('./config');
 const ethers = require('ethers');
 
@@ -66,14 +70,21 @@ bot.use(session());
 
 // After initializing the bot and session middleware:
 bot.telegram.setMyCommands([
-  { command: 'wallet', description: 'Manage your wallet' },
-  { command: 'swap', description: 'Swap tokens' },
-  { command: 'send', description: 'Send tokens' },
-  { command: 'balances', description: 'View balances' },
-  { command: 'chains', description: 'Switch blockchain' },
-  { command: 'currentchain', description: 'Show your current chain' },
-  { command: 'help', description: 'Get help' },
-  { command: 'settings', description: 'Preferences' }
+  { command: 'start', description: 'Start the bot and main menu' },
+  { command: 'help', description: 'Get help and command list' },
+  { command: 'wallet', description: '[Whitelisted] Manage your wallet' },
+  { command: 'swap', description: '[Whitelisted] Swap tokens' },
+  { command: 'send', description: '[Whitelisted] Send tokens' },
+  { command: 'balances', description: '[Whitelisted] View balances' },
+  { command: 'chains', description: '[Whitelisted] Switch blockchain' },
+  { command: 'currentchain', description: '[Whitelisted] Show current chain' },
+  { command: 'settings', description: '[Whitelisted] Bot preferences' },
+  { command: 'whitelist_add', description: '[Admin] Add address to whitelist' },
+  { command: 'whitelist_remove', description: '[Admin] Remove address from whitelist' },
+  { command: 'whitelist_list', description: '[Admin] View whitelisted addresses' },
+  { command: 'whitelist_stats', description: '[Admin] View whitelist statistics' },
+  { command: 'whitelist_monitor', description: '[Admin] View monitoring dashboard' },
+  { command: 'whitelist_reset_stats', description: '[Admin] Reset monitoring stats' }
 ]);
 
 // Initialize default wallets (for system operations)
@@ -90,7 +101,72 @@ try {
 
 // Initialize managers
 const walletManager = new WalletManager();
-const commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration);
+let commands; // Will be initialized after whitelist manager is ready
+
+// Initialize whitelist system
+const whitelistInitializer = new WhitelistInitializer();
+const whitelistManager = new WhitelistManager();
+const whitelistMonitor = new WhitelistMonitor('./logs', whitelistManager);
+const whitelistMiddleware = new WhitelistMiddleware(whitelistManager, walletManager, whitelistMonitor);
+
+// Initialize whitelist asynchronously
+(async () => {
+    try {
+        // Step 1: Initialize data directory and default whitelist file
+        console.log('🔧 Initializing whitelist data...');
+        const initResult = await whitelistInitializer.initialize();
+        
+        if (!initResult.success) {
+            throw new Error(`Whitelist initialization failed: ${initResult.errors.join(', ')}`);
+        }
+        
+        if (initResult.created) {
+            console.log('✅ Default whitelist created with required addresses');
+        } else if (initResult.restored) {
+            console.log('✅ Corrupted whitelist restored from backup');
+        } else {
+            console.log('✅ Existing whitelist validated');
+        }
+        
+        // Step 2: Initialize whitelist manager
+        await whitelistManager.initialize();
+        console.log('✅ Whitelist system initialized successfully');
+        
+        // Step 3: Initialize monitoring system
+        await whitelistMonitor.initialize();
+        console.log('✅ Whitelist monitoring system initialized');
+        
+        // Step 4: Initialize commands with whitelist manager and monitor
+        commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration, whitelistManager, whitelistMonitor);
+        console.log('✅ TelegramCommands initialized with whitelist manager and monitor');
+        
+        // Step 5: Add whitelist middleware after initialization
+        bot.use(whitelistMiddleware.middleware());
+        console.log('✅ Whitelist middleware activated');
+        
+        // Step 6: Perform health check
+        const health = await whitelistInitializer.healthCheck();
+        if (!health.healthy) {
+            console.warn('⚠️ Whitelist health issues detected:', health.issues);
+        }
+        if (health.warnings.length > 0) {
+            console.warn('⚠️ Whitelist warnings:', health.warnings);
+        }
+        
+        console.log(`📊 Whitelist ready with ${initResult.addressCount} addresses`);
+        
+    } catch (error) {
+        console.error('❌ Error initializing whitelist system:', error);
+        console.error('Bot will continue with fallback whitelist settings');
+        
+        // Initialize commands without whitelist manager as fallback
+        commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration);
+        console.log('⚠️ TelegramCommands initialized without whitelist manager');
+        
+        // Try to continue with basic functionality
+        console.log('⚠️ Bot running in degraded mode - whitelist features disabled');
+    }
+})();
 
 // User session initialization
 function getSession(ctx) {
@@ -250,11 +326,23 @@ bot.command('help', async (ctx) => {
     const session = getSession(ctx);
     const currentNetwork = session.settings.network || 'MONAD';
     
-    await ctx.replyWithMarkdown(
-        `*Monad Trading Bot Help* ℹ️\n\n` +
+    // Check if user is admin to show admin commands
+    let isAdmin = false;
+    if (commands && commands.validateAdminAccess) {
+        try {
+            isAdmin = commands.validateAdminAccess(ctx);
+        } catch (error) {
+            console.error('Error checking admin access:', error);
+        }
+    }
+    
+    let helpMessage = `*Monad Trading Bot Help* ℹ️\n\n` +
         `Currently using: *${getNetworkDisplayName(currentNetwork)}*\n\n` +
-        `*Commands:*\n` +
-        `/start - Main menu\n` +
+        `*Available to Everyone:*\n` +
+        `/start - Main menu and bot introduction\n` +
+        `/help - Show this help message\n\n` +
+        
+        `*Trading Commands (Whitelisted Users Only):*\n` +
         `/wallet - Manage your wallet\n` +
         `/swap - Swap tokens\n` +
         `/send - Send tokens\n` +
@@ -262,22 +350,42 @@ bot.command('help', async (ctx) => {
         `/token - View token info and swap options\n` +
         `/price - Check token prices\n` +
         `/network - Select blockchain network\n` +
-        `/help - Show this help message\n` +
-        `/settings - Configure bot settings\n\n` +
-        
-        `*How to Use:*\n` +
-        `1. First, create or import a wallet\n` +
-        `2. Use buttons to navigate and perform actions\n` +
-        `3. Always confirm transactions before sending\n` +
-        `4. Check balances regularly\n\n` +
+        `/settings - Configure bot settings\n\n`;
+    
+    // Add admin commands if user is admin
+    if (isAdmin) {
+        helpMessage += `*Admin Commands:*\n` +
+            `/whitelist_add <address> - Add address to whitelist\n` +
+            `/whitelist_remove <address> - Remove address from whitelist\n` +
+            `/whitelist_list - View all whitelisted addresses\n` +
+            `/whitelist_stats - View whitelist statistics\n` +
+            `/whitelist_monitor - View monitoring dashboard\n` +
+            `/whitelist_reset_stats - Reset monitoring statistics\n\n`;
+    }
+    
+    // Add whitelist information for non-admin users
+    if (!isAdmin) {
+        helpMessage += `*Access Control:*\n` +
+            `This bot uses address whitelisting for security. Only users with whitelisted wallet addresses can use trading features.\n\n` +
+            `If you see "Access Denied" messages, contact the bot administrator to get your wallet address whitelisted.\n\n`;
+    }
+    
+    helpMessage += `*How to Use:*\n` +
+        `1. First, create or import a wallet using /start\n` +
+        `2. Ensure your wallet address is whitelisted (contact admin if needed)\n` +
+        `3. Use buttons to navigate and perform actions\n` +
+        `4. Always confirm transactions before sending\n` +
+        `5. Check balances regularly\n\n` +
         
         `*Available Networks:*\n` +
         `- Monad: A high-performance L1 blockchain\n\n` +
         
         `*Links:*\n` +
-        `- [Monad Explorer](${NETWORKS.MONAD.blockExplorerUrl})`,
-        commands.getMainMenu()
-    );
+        `- [Monad Explorer](${NETWORKS.MONAD.blockExplorerUrl})\n` +
+        `- [Whitelist Guide](https://github.com/your-repo/docs/WHITELIST_GUIDE.md)\n` +
+        `- [Troubleshooting](https://github.com/your-repo/docs/WHITELIST_TROUBLESHOOTING.md)`;
+    
+    await ctx.replyWithMarkdown(helpMessage, commands?.getMainMenu());
 });
 
 // Wallet command
@@ -428,6 +536,128 @@ bot.command('currentchain', async (ctx) => {
     const session = getSession(ctx);
     const network = session.settings?.network || 'MONAD';
     await ctx.reply(`You are currently on: ${getNetworkDisplayName(network)}`);
+});
+
+// ============================================
+// WHITELIST ADMIN COMMANDS
+// ============================================
+
+// Add address to whitelist command
+bot.command('whitelist_add', async (ctx) => {
+    console.log(`Whitelist add command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    // Extract address from command text
+    const commandText = ctx.message.text;
+    const parts = commandText.split(' ');
+    const address = parts.length > 1 ? parts[1].trim() : null;
+    
+    try {
+        const result = await commands.addAddressCommand(ctx, address);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_add command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
+});
+
+// Remove address from whitelist command
+bot.command('whitelist_remove', async (ctx) => {
+    console.log(`Whitelist remove command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    // Extract address from command text
+    const commandText = ctx.message.text;
+    const parts = commandText.split(' ');
+    const address = parts.length > 1 ? parts[1].trim() : null;
+    
+    try {
+        const result = await commands.removeAddressCommand(ctx, address);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_remove command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
+});
+
+// List whitelisted addresses command
+bot.command('whitelist_list', async (ctx) => {
+    console.log(`Whitelist list command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    try {
+        const result = await commands.listWhitelistCommand(ctx);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_list command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
+});
+
+// Whitelist statistics command (bonus command for admins)
+bot.command('whitelist_stats', async (ctx) => {
+    console.log(`Whitelist stats command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    try {
+        const result = await commands.whitelistStatsCommand(ctx);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_stats command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
+});
+
+// Whitelist monitoring command (admin only)
+bot.command('whitelist_monitor', async (ctx) => {
+    console.log(`Whitelist monitor command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    try {
+        const result = await commands.whitelistMonitoringCommand(ctx);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_monitor command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
+});
+
+// Reset monitoring statistics command (admin only)
+bot.command('whitelist_reset_stats', async (ctx) => {
+    console.log(`Whitelist reset stats command received from user ${ctx.from.id}`);
+    setState(ctx, STATES.IDLE);
+    
+    if (!commands) {
+        return ctx.reply('❌ Bot is still initializing. Please try again in a moment.');
+    }
+    
+    try {
+        const result = await commands.resetMonitoringStatsCommand(ctx);
+        await ctx.replyWithMarkdown(result.message);
+    } catch (error) {
+        console.error('Error in whitelist_reset_stats command:', error);
+        await ctx.reply(`❌ Error processing command: ${error.message}`);
+    }
 });
 
 // Update mainMenuButtons to use plain text labels

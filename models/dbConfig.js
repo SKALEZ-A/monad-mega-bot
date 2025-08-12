@@ -1,12 +1,16 @@
 const { default: mongoose } = require("mongoose")
-const { MONGO_URI } = require('../config/index');
+const { BOT_CONFIG } = require('../config/index');
 
-export const connectDB = async () => {
+const connectDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI)
+    await mongoose.connect(BOT_CONFIG.MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+    })
     console.log('MongoDB connected successfully');
   } catch (error) {
     console.error('MongoDB connection failed:', error);
     process.exit(1);
   }
 }
+
+module.exports = connectDB

@@ -4,6 +4,10 @@ const MonadIntegration = require('./utils/monadIntegration');
 const MegaethIntegration = require('./utils/megaethIntegration');
 const WalletManager = require('./utils/walletManager');
 const TelegramCommands = require('./utils/telegramCommands');
+const WhitelistManager = require('./utils/whitelistManager');
+const WhitelistMiddleware = require('./utils/whitelistMiddleware');
+const WhitelistInitializer = require('./utils/whitelistInitializer');
+const WhitelistMonitor = require('./utils/whitelistMonitor');
 const { BOT_CONFIG, NETWORKS } = require('./config');
 const ethers = require('ethers');
 const connectDB = require('./models/dbConfig');
@@ -93,14 +97,21 @@ async function initializeBot() {
 
         // Set bot commands
         await bot.telegram.setMyCommands([
-            { command: 'wallet', description: 'Manage your wallet' },
-            { command: 'swap', description: 'Swap tokens' },
-            { command: 'send', description: 'Send tokens' },
-            { command: 'balances', description: 'View balances' },
-            { command: 'chains', description: 'Switch blockchain' },
-            { command: 'currentchain', description: 'Show your current chain' },
-            { command: 'help', description: 'Get help' },
-            { command: 'settings', description: 'Preferences' }
+            { command: 'start', description: 'Start the bot and main menu' },
+            { command: 'help', description: 'Get help and command list' },
+            { command: 'wallet', description: '[Whitelisted] Manage your wallet' },
+            { command: 'swap', description: '[Whitelisted] Swap tokens' },
+            { command: 'send', description: '[Whitelisted] Send tokens' },
+            { command: 'balances', description: '[Whitelisted] View balances' },
+            { command: 'chains', description: '[Whitelisted] Switch blockchain' },
+            { command: 'currentchain', description: '[Whitelisted] Show current chain' },
+            { command: 'settings', description: '[Whitelisted] Bot preferences' },
+            { command: 'whitelist_add', description: '[Admin] Add address to whitelist' },
+            { command: 'whitelist_remove', description: '[Admin] Remove address from whitelist' },
+            { command: 'whitelist_list', description: '[Admin] View whitelisted addresses' },
+            { command: 'whitelist_stats', description: '[Admin] View whitelist statistics' },
+            { command: 'whitelist_monitor', description: '[Admin] View monitoring dashboard' },
+            { command: 'whitelist_reset_stats', description: '[Admin] Reset monitoring stats' }
         ]);
 
         // Initialize default wallets (for system operations)
@@ -115,7 +126,70 @@ async function initializeBot() {
 
         // Initialize managers (after database is connected)
         walletManager = new WalletManager();
-        commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration);
+
+        // Initialize whitelist system
+        const whitelistInitializer = new WhitelistInitializer();
+        const whitelistManager = new WhitelistManager();
+        const whitelistMonitor = new WhitelistMonitor('./logs', whitelistManager);
+        const whitelistMiddleware = new WhitelistMiddleware(whitelistManager, walletManager, whitelistMonitor);
+
+        // Initialize whitelist asynchronously
+        try {
+            // Step 1: Initialize data directory and default whitelist file
+            console.log('🔧 Initializing whitelist data...');
+            const initResult = await whitelistInitializer.initialize();
+            
+            if (!initResult.success) {
+                throw new Error(`Whitelist initialization failed: ${initResult.errors.join(', ')}`);
+            }
+            
+            if (initResult.created) {
+                console.log('✅ Default whitelist created with required addresses');
+            } else if (initResult.restored) {
+                console.log('✅ Corrupted whitelist restored from backup');
+            } else {
+                console.log('✅ Existing whitelist validated');
+            }
+            
+            // Step 2: Initialize whitelist manager
+            await whitelistManager.initialize();
+            console.log('✅ Whitelist system initialized successfully');
+            
+            // Step 3: Initialize monitoring system
+            await whitelistMonitor.initialize();
+            console.log('✅ Whitelist monitoring system initialized');
+            
+            // Step 4: Initialize commands with whitelist manager and monitor
+            commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration, whitelistManager, whitelistMonitor);
+            console.log('✅ TelegramCommands initialized with whitelist manager and monitor');
+            
+            // Step 5: Add whitelist middleware after initialization
+            bot.use(whitelistMiddleware.middleware());
+            console.log('✅ Whitelist middleware activated');
+            
+            // Step 6: Perform health check
+            const health = await whitelistInitializer.healthCheck();
+            if (!health.healthy) {
+                console.warn('⚠️ Whitelist health issues detected:', health.issues);
+            }
+            if (health.warnings.length > 0) {
+                console.warn('⚠️ Whitelist warnings:', health.warnings);
+            }
+            
+            console.log(`📊 Whitelist ready with ${initResult.addressCount} addresses`);
+            
+        } catch (error) {
+            console.error('❌ Error initializing whitelist system:', error);
+            console.error('Bot will continue with fallback whitelist settings');
+            
+            // Initialize commands without whitelist manager as fallback
+            commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration);
+            console.log('⚠️ TelegramCommands initialized without whitelist manager');
+            
+            // Try to continue with basic functionality
+            console.log('⚠️ Bot running in degraded mode - whitelist features disabled');
+        }
+
         console.log('✅ Wallet manager and commands initialized');
 
         // Setup bot handlers

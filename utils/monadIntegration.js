@@ -70,6 +70,22 @@ class MonadIntegration {
             };
         } catch (error) {
             console.error('Error getting MONAD balance:', error);
+            // If error is rate limit or similar, return zero balance
+            if (
+                error.message && (
+                    error.message.includes('request limit') ||
+                    error.message.includes('rate limit') ||
+                    error.message.includes('coalesce error') ||
+                    error.message.includes('429')
+                )
+            ) {
+                return {
+                    raw: 0,
+                    formatted: '0',
+                    symbol: this.network.nativeCurrency
+                };
+            }
+            // For other errors, throw as before
             throw new Error(`Failed to get MONAD balance: ${error.message}`);
         }
     }

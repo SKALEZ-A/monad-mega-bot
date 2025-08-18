@@ -135,6 +135,7 @@ class MonadIntegration {
             if (apiKey && apiKey !== '') {
                 console.log('Using BlockVision API for token discovery');
                 const api = new BlockVisionAPI(apiKey);
+                const nftData= await api.getAccountNFTs(this.wallet.address);
                 const tokensData = await api.getAccountTokens(this.wallet.address);
                 const formattedTokens = api.formatTokensForApp(tokensData);
                 

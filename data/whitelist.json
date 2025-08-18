@@ -1,14 +1,15 @@
 {
   "version": "1.0",
-  "lastUpdated": "2025-08-08T19:37:37.274Z",
+  "lastUpdated": "2025-08-13T12:00:00.000Z",
   "addresses": [
     "0xe2f92e8f706997b021919a092437372b268a432d",
-    "0x5230b89d6728a10b34b8ec1c740a7a7a1c4afe94"
+    "0x5230b89d6728a10b34b8ec1c740a7a7a1c4afe94",
+    "0xb1AFF2461277ab6F71e164AB47a8208B96D18cEA"
   ],
   "metadata": {
-    "totalAddresses": 2,
+    "totalAddresses": 3,
     "createdAt": "2025-08-08T19:37:37.276Z",
-    "lastUpdated": "2025-08-08T19:37:37.276Z",
+    "lastUpdated": "2025-08-13T12:00:00.000Z",
     "initializedBy": "initialization-script"
   }
 }

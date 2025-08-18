@@ -37,6 +37,28 @@ class BlockVisionAPI {
         }
     }
 
+    async getAccountNFTs(address) {
+        try {
+            const response = await axios.get(`${this.baseUrl}/account/nfts`, {
+                params: { address },
+                headers: {
+                    'x-api-key': this.apiKey
+                }
+            });
+
+            if (response.data && response.data.code === 0) {
+                // Return the token data if successful
+                return response.data.result.data || [];
+            } else {
+                console.error('Error fetching NFTs from BlockVision:', response.data.reason || 'Unknown error');
+                return [];
+            }
+        } catch (error) {
+            console.error('Error calling BlockVision API:', error.message);
+            throw new Error(`Failed to fetch NFTs: ${error.message}`);
+        }
+    }
+
     /**
      * Convert BlockVision API token data to our app's format
      * @param {Array} tokens - Array of tokens from BlockVision API

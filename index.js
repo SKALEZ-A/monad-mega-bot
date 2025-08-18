@@ -8,6 +8,7 @@ const WhitelistManager = require('./utils/whitelistManager');
 const WhitelistMiddleware = require('./utils/whitelistMiddleware');
 const WhitelistInitializer = require('./utils/whitelistInitializer');
 const WhitelistMonitor = require('./utils/whitelistMonitor');
+const BikeBotNFTChecker = require('./utils/nftChecker')
 const { BOT_CONFIG, NETWORKS } = require('./config');
 const ethers = require('ethers');
 const connectDB = require('./models/dbConfig');
@@ -70,7 +71,9 @@ const STATES = {
     AWAITING_REMOVE_TOKEN: 'awaiting_remove_token',
     AWAITING_PRICE_TOKEN: 'awaiting_price_token',
     AWAITING_TOKEN_ADDRESS: 'awaiting_token_address',
-    AWAITING_NETWORK_SELECTION: 'awaiting_network_selection'
+    AWAITING_NETWORK_SELECTION: 'awaiting_network_selection',
+    AWAITING_NFT_ADDRESS: 'awaiting_nft_address',
+    NFT_VERIFICATION_PENDING: 'nft_verification_pending'
 };
 
 // Initialize bot components after database connection
@@ -131,6 +134,18 @@ async function initializeBot() {
         const whitelistInitializer = new WhitelistInitializer();
         const whitelistManager = new WhitelistManager();
         const whitelistMonitor = new WhitelistMonitor('./logs', whitelistManager);
+
+        // Initialize NFT checker (uses BlockVision API directly)
+        let nftChecker = null;
+        try {
+            nftChecker = new BikeBotNFTChecker(process.env.BIKEBOT_CONTRACT_ADDRESS);
+            console.log('✅ BikeBot NFT checker initialized');
+            console.log(`   Contract Address: ${process.env.BIKEBOT_CONTRACT_ADDRESS || 'Using fallback detection'}`);
+            console.log(`   BlockVision API: ${process.env.BLOCKVISION_API_KEY ? 'Configured ✓' : 'Missing ✗'}`);
+        } catch (error) {
+            console.warn('⚠️ NFT checker initialization failed:', error.message);
+        }
+        
         const whitelistMiddleware = new WhitelistMiddleware(whitelistManager, walletManager, whitelistMonitor);
 
         // Initialize whitelist asynchronously
@@ -138,11 +153,11 @@ async function initializeBot() {
             // Step 1: Initialize data directory and default whitelist file
             console.log('🔧 Initializing whitelist data...');
             const initResult = await whitelistInitializer.initialize();
-            
+
             if (!initResult.success) {
                 throw new Error(`Whitelist initialization failed: ${initResult.errors.join(', ')}`);
             }
-            
+
             if (initResult.created) {
                 console.log('✅ Default whitelist created with required addresses');
             } else if (initResult.restored) {
@@ -150,23 +165,23 @@ async function initializeBot() {
             } else {
                 console.log('✅ Existing whitelist validated');
             }
-            
+
             // Step 2: Initialize whitelist manager
             await whitelistManager.initialize();
             console.log('✅ Whitelist system initialized successfully');
-            
+
             // Step 3: Initialize monitoring system
             await whitelistMonitor.initialize();
             console.log('✅ Whitelist monitoring system initialized');
-            
+
             // Step 4: Initialize commands with whitelist manager and monitor
             commands = new TelegramCommands(walletManager, defaultMonadIntegration, defaultMegaethIntegration, whitelistManager, whitelistMonitor);
             console.log('✅ TelegramCommands initialized with whitelist manager and monitor');
-            
+
             // Step 5: Add whitelist middleware after initialization
             bot.use(whitelistMiddleware.middleware());
-            console.log('✅ Whitelist middleware activated');
-            
+            console.log('✅ Whitelist middleware with NFT checking activated');
+
             // Step 6: Perform health check
             const health = await whitelistInitializer.healthCheck();
             if (!health.healthy) {
@@ -175,8 +190,9 @@ async function initializeBot() {
             if (health.warnings.length > 0) {
                 console.warn('⚠️ Whitelist warnings:', health.warnings);
             }
-            
+
             console.log(`📊 Whitelist ready with ${initResult.addressCount} addresses`);
+            console.log(`🎨 NFT verification ${nftChecker ? 'enabled' : 'disabled'} for BikeBot NFTs`);
             
         } catch (error) {
             console.error('❌ Error initializing whitelist system:', error);
@@ -295,32 +311,59 @@ function setupBotHandlers() {
         return NETWORKS[network]?.name || network;
     }
 
-    // Start command
     bot.start(async (ctx) => {
         const session = getSession(ctx);
-        setState(ctx, STATES.IDLE);
-        const network = session.settings?.network || 'MONAD';
-        const networkText = `Network: ${getNetworkDisplayName(network)}\n\n`;
+        const userId = ctx.from.id.toString();
+
+        // Check if user already has access (wallet + whitelist/NFT)
+        const hasWallet = await walletManager.hasWallet(userId);
+        if (hasWallet) {
+            // User has wallet, check if they have access
+            try {
+                const whitelistMiddleware = bot.middlewares.find(m => m.name === 'whitelistMiddleware');
+                if (whitelistMiddleware) {
+                    const accessResult = await whitelistMiddleware.checkUserAccessEnhanced(ctx);
+                    if (accessResult.hasAccess) {
+                        // User has full access
+                        setState(ctx, STATES.IDLE);
+                        const network = session.settings?.network || 'MONAD';
+                        const networkText = `Network: ${getNetworkDisplayName(network)}\n\n`;
+                        return await ctx.replyWithMarkdown(
+                            networkText +
+                            `*Welcome back to Monad Trading Bot* 🚀\n\n` +
+                            `✅ Access verified${accessResult.accessMethod === 'nft' ? ' via BikeBot NFT' : ' via whitelist'}\n\n` +
+                            `**Available Commands:**\n` +
+                            `/wallet — Manage your wallet\n` +
+                            `/swap — Swap tokens\n` +
+                            `/send — Send tokens\n` +
+                            `/balances — View balances\n` +
+                            `/chains — Switch blockchain\n` +
+                            `/help — Get help`,
+                            commands.getMainMenu()
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking user access:', error);
+            }
+        }
+
+        // User doesn't have access - start verification process
+        setState(ctx, STATES.AWAITING_NFT_ADDRESS);
         await ctx.replyWithMarkdown(
-            networkText +
             `*Welcome to Monad Trading Bot* 🚀\n\n` +
-            `Easily trade tokens, manage wallets, and explore DeFi on the Monad blockchain — all from Telegram.\n\n` +
-            `Main Features:\n` +
-            `• Secure wallet creation/import (AES-256 encrypted)\n` +
-            `• Swap tokens using Uniswap contracts\n` +
-            `• Discover and manage all your tokens\n` +
-            `• Send tokens with transaction receipts\n` +
-            `• Persistent preferences & multi-wallet support\n\n` +
-            `Quick Commands:\n` +
-            `/wallet — Manage your wallet\n` +
-            `/swap — Swap tokens\n` +
-            `/send — Send tokens\n` +
-            `/balances — View balances\n` +
-            `/chains — Switch blockchain\n` +
-            `/currentchain — Show your current chain\n` +
-            `/help — Get help\n` +
-            `/settings — Preferences`,
-            commands.getMainMenu()
+            `🎨 **BikeBot NFT Verification Required**\n\n` +
+            `To access this bot, you need to verify ownership of a BikeBot NFT.\n\n` +
+            `**Verification Process:**\n` +
+            `1. Enter your wallet address that contains BikeBot NFT(s)\n` +
+            `2. We'll verify your NFT ownership\n` +
+            `3. Once verified, you can create/import your trading wallet\n\n` +
+            `📝 **Please enter your wallet address** (the one with BikeBot NFTs):\n\n` +
+            `Format: 0x1234...abcd\n\n` +
+            `❓ Don't have a BikeBot NFT? Contact the administrator for manual whitelist approval.`,
+            Markup.keyboard([
+                ['❌ Cancel']
+            ]).resize()
         );
     });
 
